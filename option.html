@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KH Explore - 氛圍過濾</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .active-main-btn { background-color: #3b82f6 !important; color: white !important; transform: scale(0.95); }
+        .active-sub-btn { background-color: #1e293b !important; color: white !important; border-color: #1e293b !important; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-10">
+
+    <!-- 頂部導航 -->
+    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 px-6 py-4">
+        <div class="flex justify-between items-center max-w-md mx-auto">
+            <div>
+                <h1 class="text-xl font-black text-slate-800 tracking-tight">KH EXPLORE</h1>
+                <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest">Shared Moments</p>
+            </div>
+            <button onclick="fetchData()" class="p-2 bg-slate-100 rounded-full active:rotate-180 transition-all duration-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-5 space-y-6">
+        
+        <!-- 主分類按鈕 -->
+        <section class="grid grid-cols-4 gap-3">
+            <button id="btn-全部" onclick="setMainFilter('全部')" class="flex flex-col items-center gap-2">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all">🏠</div>
+                <span class="text-[10px] font-bold text-slate-400">全部</span>
+            </button>
+            <button id="btn-地點" onclick="setMainFilter('地點')" class="flex flex-col items-center gap-2">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all">📍</div>
+                <span class="text-[10px] font-bold text-slate-400">地點</span>
+            </button>
+            <button id="btn-驚喜" onclick="setMainFilter('驚喜')" class="flex flex-col items-center gap-2">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all">🎁</div>
+                <span class="text-[10px] font-bold text-slate-400">驚喜</span>
+            </button>
+            <button onclick="window.open('您的Google表單連結')" class="flex flex-col items-center gap-2">
+                <div class="w-14 h-14 bg-emerald-500 shadow-lg shadow-emerald-100 rounded-2xl flex items-center justify-center text-xl text-white">➕</div>
+                <span class="text-[10px] font-bold text-slate-400">新增</span>
+            </button>
+        </section>
+
+        <!-- 子選單：氛圍與細項 -->
+        <section id="subMenu" class="hidden animate-fade">
+            <p class="text-[10px] font-black text-slate-400 mb-3 ml-1 uppercase tracking-widest">選擇氛圍風格</p>
+            <div id="subMenuList" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                <!-- 動態注入 -->
+            </div>
+        </section>
+
+        <!-- 內容列表 -->
+        <section class="space-y-4">
+            <div class="flex items-center justify-between px-1">
+                <h2 id="listLabel" class="text-sm font-bold text-slate-500 uppercase tracking-tighter">最近更新</h2>
+                <span id="counter" class="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-black">0 ITEMS</span>
+            </div>
+            
+            <div id="dataList" class="space-y-4 pb-20">
+                <!-- 骨架屏載入中 -->
+                <div class="py-20 text-center text-slate-300 italic animate-pulse">正在從雲端同步資料...</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 底部通知提示 -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-6 py-3 rounded-full opacity-0 pointer-events-none transition-opacity duration-300 z-50 shadow-2xl"></div>
+
+    <script>
+        /**
+         * 1. 配置區
+         * 請在此處填入您 Google Sheets「發佈到網路」產生的 CSV 連結
+         */
+        const config = {
+            csvUrl: "https://docs.google.com/spreadsheets/d/1ur6DxhLHX_hmOhBdx37eJSExtegrQ-T15uGBxzuMPKc/edit?usp=sharing&ouid=111111111111111111111&rtpof=true&sd=true"
+        };
+
+        /**
+         * 備份資料 (當網路請求失敗時使用)
+         */
+        const backupData = [
+            { district: "鹽埕區", name: "漫遊愛河", category: "戶外/休閒", type: "手搖飲", brand: "50嵐", detail: "黃金烏龍拿鐵" },
+            { district: "鹽埕區", name: "駁二大庫看專場", category: "音演/展覽", type: "手搖飲", brand: "迷客夏", detail: "大正紅茶拿鐵" },
+            { district: "鹽埕區", name: "西子灣看海", category: "戶外/夕陽", type: "手搖飲", brand: "清心福全", detail: "烏龍綠茶" },
+            { district: "鹽埕區", name: "旗津踏浪", category: "戶外/海濱", type: "手搖飲", brand: "CoCo 都可", detail: "百香雙響炮" },
+            { district: "鹽埕區", name: "Do good coffee & dessert", category: "咖啡廳", type: "手搖飲", brand: "再睡5分鐘", detail: "棉被午茉綠" },
+            { district: "鹽埕區", name: "神諭咖啡 駁二店", category: "咖啡廳", type: "手搖飲", brand: "可不可熟成紅茶", detail: "白玉歐蕾" },
+            { district: "鼓山區", name: "海風廣場聽音樂", category: "戶外/音樂", type: "手搖飲", brand: "鶴茶樓", detail: "泰式奶茶" },
+            { district: "鼓山區", name: "高美館看展覽", category: "藝術/文化", type: "手搖飲", brand: "麻古茶坊", detail: "翡翠柳橙" },
+            { district: "鼓山區", name: "金馬咖啡廳", category: "咖啡廳", type: "手搖飲", brand: "得正", detail: "烏龍鮮奶" },
+            { district: "三民區", name: "和好珈啡店", category: "咖啡廳", type: "點心", brand: "胖尼咖啡", detail: "可頌 (第一名)" },
+            { district: "三民區", name: "二木咖啡", category: "咖啡廳", type: "點心", brand: "harmone", detail: "法式吐司" },
+            { district: "新興區", name: "二木咖啡·夜間部", category: "咖啡廳", type: "點心", brand: "鹿聊", detail: "檸檬塔" }
+        ];
+
+        /**
+         * 2. 氛圍與子類別邏輯
+         */
+        const subOptions = {
+            '地點': [
+                { name: '全部', key: '全部', tags: [] },
+                { name: '浪漫氣氛 💕', key: '浪漫', tags: ['夕陽', '海濱', '看海', '夜景', '河畔', '浪漫'] },
+                { name: '熱鬧好玩 🔥', key: '熱鬧', tags: ['音樂', '音演', '展覽', '活動', '熱鬧'] },
+                { name: '安靜文青 📖', key: '安靜', tags: ['咖啡廳', '文化', '藝術', '圖書', '安靜'] },
+                { name: '活潑戶外 🏃', key: '活潑', tags: ['戶外', '運動', '公園', '休閒', '活潑'] }
+            ],
+            '驚喜': [
+                { name: '全部', key: '全部', tags: [] },
+                { name: '手搖飲 🥤', key: '飲', tags: ['手搖飲', '飲料'] },
+                { name: '甜點點心 🥯', key: '點', tags: ['點心', '甜點', '蛋糕', '可頌'] }
+            ]
+        };
+
+        let allData = [];
+        let filterMain = '全部';
+        let filterSub = '全部';
+
+        /**
+         * 3. 資料抓取與解析
+         */
+        async function fetchData() {
+            const list = document.getElementById('dataList');
+            try {
+                // 嘗試從雲端獲取
+                const response = await fetch(config.csvUrl);
+                if (!response.ok) throw new Error("Google 請求未成功");
+                
+                const csvText = await response.text();
+                if (csvText.includes("<!DOCTYPE html>")) throw new Error("連結格式錯誤 (非 CSV)");
+
+                const rows = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+                
+                allData = rows.slice(1).map(row => {
+                    const cols = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+                    return {
+                        district: (cols[0] || "").replace(/"/g, ''),
+                        name: (cols[1] || "").replace(/"/g, ''),
+                        category: (cols[2] || "").replace(/"/g, ''),
+                        type: (cols[3] || "").replace(/"/g, ''),
+                        brand: (cols[4] || "").replace(/"/g, ''),
+                        detail: (cols[5] || "").replace(/"/g, '')
+                    };
+                });
+
+                showToast(`同步成功！共 ${allData.length} 筆資料`);
+            } catch (err) {
+                console.warn("無法取得雲端資料，改用內建備份資料。", err);
+                allData = backupData; // 使用備份資料
+                showToast("使用內建資料模式 (離線)");
+            } finally {
+                renderData();
+            }
+        }
+
+        /**
+         * 4. 渲染邏輯
+         */
+        function setMainFilter(type) {
+            filterMain = type;
+            filterSub = '全部';
+            
+            ['全部', '地點', '驚喜'].forEach(id => {
+                const btn = document.getElementById(`btn-${id}`).firstElementChild;
+                if (id === type) {
+                    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
+                } else {
+                    btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
+                }
+            });
+
+            renderSubMenu();
+            renderData();
+        }
+
+        function renderSubMenu() {
+            const menu = document.getElementById('subMenu');
+            const list = document.getElementById('subMenuList');
+            
+            if (filterMain === '全部') {
+                menu.classList.add('hidden');
+                return;
+            }
+
+            menu.classList.remove('hidden');
+            list.innerHTML = '';
+
+            subOptions[filterMain].forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = `flex-shrink-0 px-5 py-2.5 rounded-2xl text-xs font-bold border border-slate-200 transition-all shadow-sm ${filterSub === opt.key ? 'active-sub-btn' : 'bg-white text-slate-500'}`;
+                btn.innerText = opt.name;
+                btn.onclick = () => {
+                    filterSub = opt.key;
+                    renderSubMenu();
+                    renderData();
+                };
+                list.appendChild(btn);
+            });
+        }
+
+        function renderData() {
+            const list = document.getElementById('dataList');
+            const label = document.getElementById('listLabel');
+            
+            let results = allData.filter(item => {
+                const isSurprise = item.type.includes('飲') || item.type.includes('點');
+                if (filterMain === '地點') return !isSurprise;
+                if (filterMain === '驚喜') return isSurprise;
+                return true;
+            });
+
+            if (filterSub !== '全部') {
+                const currentOpt = subOptions[filterMain].find(o => o.key === filterSub);
+                results = results.filter(item => {
+                    const content = (item.category + item.type + item.name + item.detail).toLowerCase();
+                    return currentOpt.tags.some(tag => content.includes(tag.toLowerCase()));
+                });
+            }
+
+            label.innerText = filterSub === '全部' ? `${filterMain}清單` : `${filterSub}風格`;
+            document.getElementById('counter').innerText = `${results.length} ITEMS`;
+            
+            list.innerHTML = results.length === 0 ? 
+                '<div class="py-20 text-center text-slate-300 text-sm">此分類下尚無符合資料</div>' : '';
+
+            results.forEach(item => {
+                const isDrink = item.type.includes('飲');
+                const card = document.createElement('div');
+                card.className = "bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4 animate-fade transition-transform active:scale-[0.98]";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-1.5">
+                            <div class="flex gap-2">
+                                <span class="bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter">${item.district}</span>
+                                <span class="bg-slate-100 text-slate-400 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">${item.category}</span>
+                            </div>
+                            <h3 class="text-xl font-bold text-slate-800 tracking-tight">${item.name}</h3>
+                        </div>
+                        <div class="text-3xl filter grayscale-[0.2]">${isDrink ? '🥤' : '🥯'}</div>
+                    </div>
+                    
+                    <div class="bg-slate-50 p-4 rounded-3xl border border-slate-100/50 flex items-center justify-between">
+                        <div class="flex-1">
+                            <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5">${item.brand}</p>
+                            <p class="text-xs font-bold text-slate-700">${item.detail}</p>
+                        </div>
+                        <div class="flex flex-col items-end">
+                            <span class="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-lg">${item.type}</span>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.innerText = msg;
+            el.classList.replace('opacity-0', 'opacity-100');
+            setTimeout(() => el.classList.replace('opacity-100', 'opacity-0'), 2500);
+        }
+
+        window.onload = fetchData;
+    </script>
+</body>
+</html>
