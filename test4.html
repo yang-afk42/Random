@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KH Explore - 氛圍過濾</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-10">
+
+    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 px-6 py-4">
+        <div class="flex justify-between items-center max-w-md mx-auto">
+            <div>
+                <h1 class="text-xl font-black text-slate-800 tracking-tight">KH EXPLORE</h1>
+                <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest">Shared Moments</p>
+            </div>
+            <button onclick="fetchData()" class="p-2 bg-slate-100 rounded-full active:rotate-180 transition-all duration-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-5 space-y-6">
+        
+        <section class="grid grid-cols-4 gap-3">
+            <button id="btn-全部" onclick="setMainFilter('全部')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">🏠</div>
+                <span class="text-[10px] font-bold text-slate-400">全部</span>
+            </button>
+            <button id="btn-地點" onclick="setMainFilter('地點')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">📍</div>
+                <span class="text-[10px] font-bold text-slate-400">地點</span>
+            </button>
+            <button id="btn-驚喜" onclick="setMainFilter('驚喜')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">🎁</div>
+                <span class="text-[10px] font-bold text-slate-400">驚喜</span>
+            </button>
+            <button onclick="window.open('您的Google表單連結')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-emerald-500 shadow-lg shadow-emerald-100 rounded-2xl flex items-center justify-center text-xl text-white transition-all group-active:scale-95">➕</div>
+                <span class="text-[10px] font-bold text-slate-400">新增</span>
+            </button>
+        </section>
+
+        <section id="subMenu" class="hidden animate-fade">
+            <p class="text-[10px] font-black text-slate-400 mb-3 ml-1 uppercase tracking-widest">選擇風格</p>
+            <div id="subMenuList" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                </div>
+        </section>
+
+        <section class="space-y-4">
+            <div class="flex items-center justify-between px-1">
+                <h2 id="listLabel" class="text-sm font-bold text-slate-500 uppercase tracking-tighter">清單</h2>
+                <span id="counter" class="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-black">0 ITEMS</span>
+            </div>
+            <div id="dataList" class="space-y-4 pb-20">
+                <div class="py-20 text-center text-slate-300 italic animate-pulse">正在從雲端同步資料...</div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-6 py-3 rounded-full opacity-0 pointer-events-none transition-opacity duration-300 z-50 shadow-2xl"></div>
+
+    <script>
+        const config = {
+            // 請確認您的 CSV 連結正確
+            csvUrl: "https://docs.google.com/spreadsheets/d/1ur6DxhLHX_hmOhBdx37eJSExtegrQ-T15uGBxzuMPKc/export?format=csv"
+        };
+
+        const backupData = [
+            { district: "範例", name: "無資料", category: "", type: "", brand: "", detail: "請檢查連結" }
+        ];
+
+        /**
+         * 定義關鍵字映射
+         * 這裡的 tags 會去比對您 Excel 裡的內容
+         */
+        const subOptions = {
+            '地點': [
+                { name: '全部', key: '全部', tags: [] },
+                // 浪漫: 夕陽, 海濱, 漁港, 夜景
+                { name: '浪漫氣氛 💕', key: '浪漫', tags: ['夕陽', '海濱', '漁港', '夜景', '海'] },
+                // 熱鬧: 音演, 展覽, 音樂, 市集, 娛樂
+                { name: '熱鬧好玩 🔥', key: '熱鬧', tags: ['音演', '展覽', '音樂', '市集', '娛樂', '熱鬧'] },
+                // 安靜: 咖啡廳, 藝術, 文化, 歷史
+                { name: '安靜文青 📖', key: '安靜', tags: ['咖啡廳', '藝術', '文化', '歷史', '安靜'] },
+                // 活潑: 休閒, 運動, 露營 (這裡包含了您 Excel 的 "市集公園", "運動室內", "露營")
+                { name: '活潑戶外 🏃', key: '活潑', tags: ['休閒', '運動', '露營', '公園', '活潑'] }
+            ],
+            '驚喜': [
+                { name: '全部', key: '全部', tags: [] },
+                { name: '手搖飲 🥤', key: '飲', tags: ['飲', '茶', '咖啡', '果汁'] },
+                { name: '甜點點心 🥯', key: '點', tags: ['點', '蛋糕', '麵包', '小吃', '食'] }
+            ]
+        };
+
+        let allData = [];
+        let filterMain = '全部';
+        let filterSub = '全部';
+
+        function fetchData() {
+            Papa.parse(config.csvUrl, {
+                download: true,
+                header: false,
+                complete: function(results) {
+                    // 嚴格對應欄位索引
+                    // [0]District, [1]Name, [2]Category, [3]Type, [4]Brand, [5]Detail
+                    allData = results.data.slice(1).map(cols => {
+                        if (!cols[0]) return null;
+                        return {
+                            district: cols[0] || "",
+                            name: cols[1] || "",
+                            category: cols[2] || "",
+                            type: cols[3] || "",
+                            brand: cols[4] || "",
+                            detail: cols[5] || ""
+                        };
+                    }).filter(item => item !== null);
+
+                    showToast(`同步成功！共 ${allData.length} 筆資料`);
+                    renderData();
+                },
+                error: function(err) {
+                    allData = backupData;
+                    renderData();
+                }
+            });
+        }
+
+        function setMainFilter(type) {
+            filterMain = type;
+            filterSub = '全部'; // 切換大分類時，重置子分類
+            
+            // UI 更新
+            ['全部', '地點', '驚喜'].forEach(id => {
+                const btnContainer = document.getElementById(`btn-${id}`);
+                const btn = btnContainer.firstElementChild;
+                const txt = btnContainer.lastElementChild;
+                
+                if (id === type) {
+                    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
+                    txt.classList.add('text-blue-600');
+                } else {
+                    btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
+                    txt.classList.remove('text-blue-600');
+                }
+            });
+
+            renderSubMenu();
+            renderData();
+        }
+
+        function renderSubMenu() {
+            const menu = document.getElementById('subMenu');
+            const list = document.getElementById('subMenuList');
+            
+            if (filterMain === '全部') {
+                menu.classList.add('hidden');
+                return;
+            }
+
+            menu.classList.remove('hidden');
+            list.innerHTML = '';
+
+            if (subOptions[filterMain]) {
+                subOptions[filterMain].forEach(opt => {
+                    const btn = document.createElement('button');
+                    const isActive = filterSub === opt.key;
+                    btn.className = `flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm whitespace-nowrap ${
+                        isActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'
+                    }`;
+                    btn.innerText = opt.name;
+                    btn.onclick = () => { filterSub = opt.key; renderSubMenu(); renderData(); };
+                    list.appendChild(btn);
+                });
+            }
+        }
+
+        function renderData() {
+            const list = document.getElementById('dataList');
+            const label = document.getElementById('listLabel');
+            
+            // --- 步驟 1: 嚴格過濾資料 ---
+            let results = allData.filter(item => {
+                
+                // 情況 A: 地點模式
+                // 規則: 必須有 category 資料。忽略 type, brand, detail。
+                if (filterMain === '地點') {
+                    if (!item.category) return false; // 沒填出遊類型就不顯示
+                    
+                    // 檢查子分類 (風格)
+                    if (filterSub !== '全部') {
+                        const currentOpt = subOptions['地點'].find(o => o.key === filterSub);
+                        // 比對 category 欄位是否包含關鍵字
+                        return currentOpt.tags.some(tag => item.category.includes(tag));
+                    }
+                    return true;
+                }
+
+                // 情況 B: 驚喜模式
+                // 規則: 必須有 type 資料。忽略 category。
+                if (filterMain === '驚喜') {
+                    if (!item.type) return false; // 沒填驚喜類型就不顯示
+                    
+                    // 檢查子分類
+                    if (filterSub !== '全部') {
+                        const currentOpt = subOptions['驚喜'].find(o => o.key === filterSub);
+                        // 比對 type 欄位是否包含關鍵字
+                        return currentOpt.tags.some(tag => item.type.includes(tag));
+                    }
+                    return true;
+                }
+
+                // 情況 C: 全部模式 (顯示所有資料，但依照是否有值來判斷)
+                return true;
+            });
+
+            // 更新計數
+            label.innerText = filterSub === '全部' ? `${filterMain}清單` : `${filterSub}風格`;
+            document.getElementById('counter').innerText = `${results.length} ITEMS`;
+            
+            list.innerHTML = results.length === 0 ? 
+                '<div class="py-20 text-center text-slate-300 text-sm">此分類下尚無資料</div>' : '';
+
+            // --- 步驟 2: 嚴格渲染卡片 (視覺隔離) ---
+            results.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-3 animate-fade transition-transform active:scale-[0.98]";
+
+                let cardContent = '';
+
+                // === 渲染模式：地點 ===
+                // 只顯示: 區域, 名稱, 出遊類型 (Category)
+                // 絕對不顯示: Type, Brand, Detail
+                if (filterMain === '地點') {
+                    cardContent = `
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <div class="flex flex-wrap gap-1.5">
+                                    <span class="bg-slate-800 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">${item.district}</span>
+                                </div>
+                                <h3 class="text-lg font-black text-slate-800 tracking-tight leading-tight">${item.name}</h3>
+                            </div>
+                            <div class="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg">
+                                ${item.category}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // === 渲染模式：驚喜 ===
+                // 只顯示: 驚喜類型 (Type), 品牌 (Brand), 細項 (Detail)
+                // 絕對不顯示: Category
+                else if (filterMain === '驚喜') {
+                    const isDrink = item.type.includes('飲') || item.type.includes('茶');
+                    cardContent = `
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <span class="bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">驚喜</span>
+                                <h3 class="text-lg font-black text-slate-800 tracking-tight leading-tight">${item.name}</h3> </div>
+                            <div class="text-2xl filter grayscale-[0.3] opacity-80">${isDrink ? '🥤' : '🎁'}</div>
+                        </div>
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5 truncate">${item.brand}</p>
+                                <p class="text-xs font-bold text-slate-600 truncate">${item.detail}</p>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <span class="text-[9px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-lg">${item.type}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // === 渲染模式：全部 ===
+                // 混合顯示，或者根據資料有無來判斷
+                else {
+                    const isDrink = item.type && (item.type.includes('飲') || item.type.includes('茶'));
+                    cardContent = `
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <div class="flex flex-wrap gap-1.5">
+                                    <span class="bg-slate-800 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">${item.district}</span>
+                                    ${item.category ? `<span class="bg-blue-50 text-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-md tracking-wider border border-blue-100">${item.category}</span>` : ''}
+                                </div>
+                                <h3 class="text-lg font-black text-slate-800 tracking-tight leading-tight">${item.name}</h3>
+                            </div>
+                             ${item.type ? `<div class="text-2xl filter grayscale-[0.3] opacity-80">${isDrink ? '🥤' : '🎁'}</div>` : ''}
+                        </div>
+                        
+                        ${item.type ? `
+                        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 mt-3">
+                            <div class="min-w-0">
+                                <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5 truncate">${item.brand}</p>
+                                <p class="text-xs font-bold text-slate-600 truncate">${item.detail}</p>
+                            </div>
+                             <div class="flex-shrink-0">
+                                <span class="text-[9px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-lg">${item.type}</span>
+                            </div>
+                        </div>` : ''}
+                    `;
+                }
+
+                card.innerHTML = cardContent;
+                list.appendChild(card);
+            });
+        }
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.innerText = msg;
+            el.classList.replace('opacity-0', 'opacity-100');
+            setTimeout(() => el.classList.replace('opacity-100', 'opacity-0'), 2500);
+        }
+
+        window.onload = fetchData;
+    </script>
+</body>
+</html>
