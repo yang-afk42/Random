@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KH Explore - 氛圍過濾</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen pb-10">
+
+    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 px-6 py-4">
+        <div class="flex justify-between items-center max-w-md mx-auto">
+            <div>
+                <h1 class="text-xl font-black text-slate-800 tracking-tight">KH EXPLORE</h1>
+                <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest">Shared Moments</p>
+            </div>
+            <button onclick="fetchData()" class="p-2 bg-slate-100 rounded-full active:rotate-180 transition-all duration-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-md mx-auto p-5 space-y-6">
+        
+        <section class="grid grid-cols-4 gap-3">
+            <button id="btn-全部" onclick="setMainFilter('全部')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">🏠</div>
+                <span class="text-[10px] font-bold text-slate-400">全部</span>
+            </button>
+            <button id="btn-地點" onclick="setMainFilter('地點')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">📍</div>
+                <span class="text-[10px] font-bold text-slate-400">地點</span>
+            </button>
+            <button id="btn-驚喜" onclick="setMainFilter('驚喜')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">🎁</div>
+                <span class="text-[10px] font-bold text-slate-400">驚喜</span>
+            </button>
+            <button onclick="window.open('您的Google表單連結')" class="flex flex-col items-center gap-2 group">
+                <div class="w-14 h-14 bg-emerald-500 shadow-lg shadow-emerald-100 rounded-2xl flex items-center justify-center text-xl text-white transition-all group-active:scale-95">➕</div>
+                <span class="text-[10px] font-bold text-slate-400">新增</span>
+            </button>
+        </section>
+
+        <section id="subMenu" class="hidden animate-fade">
+            <p class="text-[10px] font-black text-slate-400 mb-3 ml-1 uppercase tracking-widest">選擇風格</p>
+            <div id="subMenuList" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+                </div>
+        </section>
+
+        <section class="space-y-4">
+            <div class="flex items-center justify-between px-1">
+                <h2 id="listLabel" class="text-sm font-bold text-slate-500 uppercase tracking-tighter">清單</h2>
+                <span id="counter" class="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-black">0 ITEMS</span>
+            </div>
+            
+            <div id="dataList" class="space-y-4 pb-20">
+                <div class="py-20 text-center text-slate-300 italic animate-pulse">正在從雲端同步資料...</div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-6 py-3 rounded-full opacity-0 pointer-events-none transition-opacity duration-300 z-50 shadow-2xl"></div>
+
+    <script>
+        /**
+         * 1. 資料設定
+         */
+        const config = {
+            csvUrl: "https://docs.google.com/spreadsheets/d/1ur6DxhLHX_hmOhBdx37eJSExtegrQ-T15uGBxzuMPKc/export?format=csv"
+        };
+
+        const backupData = [
+            { district: "測試區", name: "無資料", category: "測試", type: "測試", brand: "無", detail: "請檢查連結" }
+        ];
+
+        /**
+         * 2. 關鍵字設定
+         */
+        const subOptions = {
+            '地點': [
+                { name: '全部', key: '全部', tags: [] },
+                { name: '浪漫氣氛 💕', key: '浪漫', tags: ['夕陽', '海濱', '漁港', '夜景', '海'] },
+                { name: '熱鬧好玩 🔥', key: '熱鬧', tags: ['音演', '展覽', '音樂', '市集', '娛樂', '熱鬧'] },
+                { name: '安靜文青 📖', key: '安靜', tags: ['咖啡廳', '藝術', '文化', '歷史', '安靜'] },
+                { name: '活潑戶外 🏃', key: '活潑', tags: ['休閒', '運動', '露營', '公園', '活潑'] }
+            ],
+            '驚喜': [
+                { name: '全部', key: '全部', tags: [] },
+                { name: '手搖飲 🥤', key: '飲', tags: ['飲', '茶', '咖啡', '果汁'] },
+                { name: '甜點點心 🥯', key: '點', tags: ['點', '蛋糕', '麵包', '小吃', '食'] }
+            ]
+        };
+
+        let allData = [];
+        let filterMain = '全部';
+        let filterSub = '全部';
+
+        /**
+         * 3. 抓取資料
+         */
+        function fetchData() {
+            Papa.parse(config.csvUrl, {
+                download: true,
+                header: false,
+                complete: function(results) {
+                    allData = results.data.slice(1).map(cols => {
+                        if (!cols[0] && !cols[3]) return null; // 基本過濾
+                        return {
+                            district: cols[0] || "", // 區域
+                            name: cols[1] || "",     // 地點名稱
+                            category: cols[2] || "", // 出遊類型
+                            type: cols[3] || "",     // 驚喜類型
+                            brand: cols[4] || "",    // 品牌名稱 (驚喜的主角)
+                            detail: cols[5] || ""    // 驚喜細項
+                        };
+                    }).filter(item => item !== null);
+                    showToast(`同步成功！共 ${allData.length} 筆`);
+                    renderData();
+                },
+                error: function() {
+                    allData = backupData;
+                    renderData();
+                }
+            });
+        }
+
+        /**
+         * 4. 切換按鈕
+         */
+        function setMainFilter(type) {
+            filterMain = type;
+            filterSub = '全部';
+            ['全部', '地點', '驚喜'].forEach(id => {
+                const btnContainer = document.getElementById(`btn-${id}`);
+                const btn = btnContainer.firstElementChild;
+                const txt = btnContainer.lastElementChild;
+                if (id === type) {
+                    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
+                    txt.classList.add('text-blue-600');
+                } else {
+                    btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
+                    txt.classList.remove('text-blue-600');
+                }
+            });
+            renderSubMenu();
+            renderData();
+        }
+
+        function renderSubMenu() {
+            const menu = document.getElementById('subMenu');
+            const list = document.getElementById('subMenuList');
+            if (filterMain === '全部') { menu.classList.add('hidden'); return; }
+            menu.classList.remove('hidden');
+            list.innerHTML = '';
+            if (subOptions[filterMain]) {
+                subOptions[filterMain].forEach(opt => {
+                    const btn = document.createElement('button');
+                    btn.className = `flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm ${filterSub === opt.key ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`;
+                    btn.innerText = opt.name;
+                    btn.onclick = () => { filterSub = opt.key; renderSubMenu(); renderData(); };
+                    list.appendChild(btn);
+                });
+            }
+        }
+
+        /**
+         * 5. 核心渲染 (嚴格區分模式)
+         */
+        function renderData() {
+            const list = document.getElementById('dataList');
+            list.innerHTML = '';
+            
+            // 這裡我們不把 row 當成同一件事，而是根據模式「萃取」要顯示的欄位
+            let displayItems = [];
+
+            allData.forEach(item => {
+                // === 地點模式邏輯 ===
+                // 如果是地點模式，或者全部模式下有地點資料
+                if ((filterMain === '地點' || filterMain === '全部') && item.category) {
+                    
+                    // 檢查地點關鍵字
+                    let match = true;
+                    if (filterMain === '地點' && filterSub !== '全部') {
+                        const opt = subOptions['地點'].find(o => o.key === filterSub);
+                        match = opt.tags.some(t => item.category.includes(t));
+                    }
+
+                    if (match) {
+                        displayItems.push({
+                            type: 'location', // 標記這是地點卡片
+                            tag: item.category,     // 左上角: 咖啡廳
+                            title: item.name,       // 主標題: 鹿聊
+                            subtitle: item.district,// 副標題: 新興區
+                            icon: '📍'
+                        });
+                    }
+                }
+
+                // === 驚喜模式邏輯 ===
+                // 如果是驚喜模式，或者全部模式下有驚喜資料
+                if ((filterMain === '驚喜' || filterMain === '全部') && item.type) {
+                    
+                    // 檢查驚喜關鍵字
+                    let match = true;
+                    if (filterMain === '驚喜' && filterSub !== '全部') {
+                        const opt = subOptions['驚喜'].find(o => o.key === filterSub);
+                        match = opt.tags.some(t => item.type.includes(t));
+                    }
+
+                    if (match) {
+                        displayItems.push({
+                            type: 'surprise', // 標記這是驚喜卡片
+                            tag: item.type,      // 左上角: 點心
+                            title: item.brand,   // 主標題: 蘇阿嬤 (注意：這裡換成品牌了！)
+                            subtitle: item.detail, // 副標題: 雞蛋酥
+                            icon: item.type.includes('飲') ? '🥤' : '🎁'
+                        });
+                    }
+                }
+            });
+
+            // 更新計數
+            document.getElementById('listLabel').innerText = filterSub === '全部' ? `${filterMain}清單` : `${filterSub}風格`;
+            document.getElementById('counter').innerText = `${displayItems.length} ITEMS`;
+
+            if (displayItems.length === 0) {
+                list.innerHTML = '<div class="py-20 text-center text-slate-300 text-sm">尚無資料</div>';
+                return;
+            }
+
+            // 生成卡片
+            displayItems.forEach(cardData => {
+                const el = document.createElement('div');
+                el.className = "bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-3 animate-fade transition-transform active:scale-[0.98]";
+                
+                // 這裡的 HTML 結構完全一致，但內容已經根據上方邏輯被徹底替換了
+                el.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-1">
+                            <span class="bg-slate-800 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                ${cardData.tag} 
+                            </span>
+                            <h3 class="text-lg font-black text-slate-800 tracking-tight leading-tight">
+                                ${cardData.title}
+                            </h3>
+                        </div>
+                        <div class="text-2xl filter grayscale-[0.3] opacity-80">${cardData.icon}</div>
+                    </div>
+                    
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100/50 flex items-center">
+                        <p class="text-xs font-bold text-slate-600 flex-1">
+                            ${cardData.subtitle}
+                        </p>
+                    </div>
+                `;
+                list.appendChild(el);
+            });
+        }
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.innerText = msg;
+            el.classList.replace('opacity-0', 'opacity-100');
+            setTimeout(() => el.classList.replace('opacity-100', 'opacity-0'), 2500);
+        }
+
+        window.onload = fetchData;
+    </script>
+</body>
+</html>
