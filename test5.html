@@ -2,304 +2,132 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KH Explore - 氛圍過濾</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KH Explore - 除錯模式</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+        body { font-family: sans-serif; }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen pb-10">
+<body class="bg-slate-50 min-h-screen p-5">
 
-    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 px-6 py-4">
-        <div class="flex justify-between items-center max-w-md mx-auto">
-            <div>
-                <h1 class="text-xl font-black text-slate-800 tracking-tight">KH EXPLORE</h1>
-                <p class="text-[9px] text-blue-500 font-bold uppercase tracking-widest">Shared Moments</p>
-            </div>
-            <button onclick="fetchData()" class="p-2 bg-slate-100 rounded-full active:rotate-180 transition-all duration-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </button>
-        </div>
-    </header>
+    <div id="debugConsole" class="bg-black text-green-400 p-4 rounded-xl text-xs font-mono mb-5 overflow-auto max-h-60 shadow-2xl border-2 border-green-600">
+        > 等待資料載入...
+    </div>
 
-    <main class="max-w-md mx-auto p-5 space-y-6">
-        
-        <section class="grid grid-cols-4 gap-3">
-            <button id="btn-全部" onclick="setMainFilter('全部')" class="flex flex-col items-center gap-2 group">
-                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">🏠</div>
-                <span class="text-[10px] font-bold text-slate-400">全部</span>
-            </button>
-            <button id="btn-地點" onclick="setMainFilter('地點')" class="flex flex-col items-center gap-2 group">
-                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">📍</div>
-                <span class="text-[10px] font-bold text-slate-400">地點</span>
-            </button>
-            <button id="btn-驚喜" onclick="setMainFilter('驚喜')" class="flex flex-col items-center gap-2 group">
-                <div class="w-14 h-14 bg-white shadow-sm rounded-2xl flex items-center justify-center text-xl border border-slate-100 transition-all group-active:scale-95">🎁</div>
-                <span class="text-[10px] font-bold text-slate-400">驚喜</span>
-            </button>
-            <button onclick="window.open('https://docs.google.com/forms/u/0/')" class="flex flex-col items-center gap-2 group">
-                <div class="w-14 h-14 bg-emerald-500 shadow-lg shadow-emerald-100 rounded-2xl flex items-center justify-center text-xl text-white transition-all group-active:scale-95">➕</div>
-                <span class="text-[10px] font-bold text-slate-400">新增</span>
-            </button>
-        </section>
-
-        <section id="subMenu" class="hidden animate-fade">
-            <p class="text-[10px] font-black text-slate-400 mb-3 ml-1 uppercase tracking-widest">選擇風格</p>
-            <div id="subMenuList" class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-                </div>
-        </section>
-
-        <section class="space-y-4">
-            <div class="flex items-center justify-between px-1">
-                <h2 id="listLabel" class="text-sm font-bold text-slate-500 uppercase tracking-tighter">清單</h2>
-                <span id="counter" class="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-black">0 ITEMS</span>
-            </div>
-            
-            <div id="dataList" class="space-y-4 pb-20">
-                <div class="py-20 text-center text-slate-300 italic animate-pulse">正在從雲端同步資料...</div>
-            </div>
-        </section>
-    </main>
-
-    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-6 py-3 rounded-full opacity-0 pointer-events-none transition-opacity duration-300 z-50 shadow-2xl"></div>
+    <div id="dataList" class="space-y-4 pb-20"></div>
 
     <script>
-        /**
-         * 1. 配置區
-         * 這裡可以直接貼上 Google Sheet 的「共用連結」
-         */
+        // 設定區
         const config = {
             csvUrl: "https://docs.google.com/spreadsheets/d/1ur6DxhLHX_hmOhBdx37eJSExtegrQ-T15uGBxzuMPKc/edit?usp=sharing"
         };
 
-        const backupData = [
-            { district: "讀取中", name: "請稍候", category: "", type: "", brand: "", detail: "" }
-        ];
-
-        /**
-         * 2. 關鍵字設定 (Sub Options)
-         */
+        // 關鍵字設定
         const subOptions = {
             '地點': [
                 { name: '全部', key: '全部', tags: [] },
-                { name: '浪漫氣氛 💕', key: '浪漫', tags: ['夕陽', '海濱', '漁港', '夜景', '海'] },
-                { name: '熱鬧好玩 🔥', key: '熱鬧', tags: ['音演', '展覽', '音樂', '市集', '娛樂', '熱鬧'] },
-                { name: '安靜文青 📖', key: '安靜', tags: ['咖啡廳', '藝術', '文化', '歷史', '安靜'] },
-                { name: '活潑戶外 🏃', key: '活潑', tags: ['休閒', '運動', '露營', '公園', '活潑'] }
+                { name: '浪漫', key: '浪漫', tags: ['夕陽', '海濱', '漁港', '夜景', '海'] },
+                { name: '熱鬧', key: '熱鬧', tags: ['音演', '展覽', '音樂', '市集', '娛樂', '熱鬧'] },
+                { name: '安靜', key: '安靜', tags: ['咖啡廳', '藝術', '文化', '歷史', '安靜'] },
+                { name: '活潑', key: '活潑', tags: ['休閒', '運動', '露營', '公園', '活潑'] }
             ],
             '驚喜': [
                 { name: '全部', key: '全部', tags: [] },
-                { name: '手搖飲 🥤', key: '飲', tags: ['飲', '茶', '咖啡', '果汁'] },
-                { name: '甜點點心 🥯', key: '點', tags: ['點', '蛋糕', '麵包', '小吃', '食'] }
+                { name: '飲', key: '飲', tags: ['飲', '茶', '咖啡', '果汁'] },
+                { name: '點', key: '點', tags: ['點', '蛋糕', '麵包', '小吃', '食'] }
             ]
         };
 
-        let allData = [];
-        let filterMain = '全部';
-        let filterSub = '全部';
+        function log(msg) {
+            const el = document.getElementById('debugConsole');
+            el.innerHTML += `<div>> ${msg}</div>`;
+            console.log(msg);
+        }
 
-        /**
-         * 3. 智慧抓取資料
-         */
         function fetchData() {
-            // 自動修正連結：把 /edit 換成 /export?format=csv
+            // 自動修復連結
             let finalUrl = config.csvUrl;
             if (finalUrl.includes("/edit")) {
                 finalUrl = finalUrl.replace(/\/edit.*$/, "/export?format=csv");
             }
+            // 加上 gid=0 強制讀取第一頁 (如果有多頁的話)
+            finalUrl += "&gid=0";
 
-            // 加上時間戳記 (&t=...) 防止瀏覽器快取舊資料
-            // 加上 encoding: "UTF-8" 防止中文亂碼
+            log(`正在連線到: ${finalUrl}`);
+            log("正在下載並解析 CSV...");
+
             Papa.parse(finalUrl + "&t=" + Date.now(), {
                 download: true,
                 header: false,
-                encoding: "UTF-8", 
+                encoding: "UTF-8",
                 complete: function(results) {
-                    // 對應欄位：[0]區域, [1]地點名稱, [2]出遊類型, [3]驚喜類型, [4]品牌名稱, [5]驚喜品項
-                    allData = results.data.slice(1).map(cols => {
-                        // 簡單檢查：如果整行都沒字，可能是空行
-                        if (!cols[0] && !cols[3]) return null;
-                        return {
-                            district: cols[0] || "",
-                            name: cols[1] || "",
-                            category: cols[2] || "",
-                            type: cols[3] || "",
-                            brand: cols[4] || "",
-                            detail: cols[5] || ""
-                        };
-                    }).filter(item => item !== null);
+                    log(`下載完成！原始資料共 ${results.data.length} 行`);
+                    
+                    // 印出前 3 行資料讓您檢查
+                    if (results.data.length > 0) {
+                        log("--- 資料預覽 (前3行) ---");
+                        results.data.slice(0, 3).forEach((row, i) => {
+                            log(`[第${i}行]: ${JSON.stringify(row)}`);
+                        });
+                        
+                        // 檢查是否讀到 HTML (代表權限錯誤)
+                        if (results.data[0][0] && results.data[0][0].includes("<!DOCTYPE")) {
+                            log("❌ 錯誤：讀取到 HTML 代碼！請確認 Google Sheet 已開啟「知道連結的任何人都能檢視」。");
+                            return;
+                        }
+                    } else {
+                        log("❌ 錯誤：CSV 內容是空的！");
+                    }
 
-                    showToast(`同步成功！共 ${allData.length} 筆資料`);
-                    renderData();
+                    renderData(results.data.slice(1));
                 },
                 error: function(err) {
-                    console.warn("讀取失敗:", err);
-                    allData = backupData;
-                    renderData();
+                    log(`❌ 連線失敗: ${err}`);
                 }
             });
         }
 
-        /**
-         * 4. UI 互動
-         */
-        function setMainFilter(type) {
-            filterMain = type;
-            filterSub = '全部';
-            ['全部', '地點', '驚喜'].forEach(id => {
-                const btnContainer = document.getElementById(`btn-${id}`);
-                const btn = btnContainer.firstElementChild;
-                const txt = btnContainer.lastElementChild;
-                if (id === type) {
-                    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
-                    txt.classList.add('text-blue-600');
-                } else {
-                    btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-blue-100', 'shadow-lg');
-                    txt.classList.remove('text-blue-600');
-                }
-            });
-            renderSubMenu();
-            renderData();
-        }
-
-        function renderSubMenu() {
-            const menu = document.getElementById('subMenu');
-            const list = document.getElementById('subMenuList');
-            if (filterMain === '全部') { menu.classList.add('hidden'); return; }
-            
-            menu.classList.remove('hidden');
-            list.innerHTML = '';
-            
-            if (subOptions[filterMain]) {
-                subOptions[filterMain].forEach(opt => {
-                    const btn = document.createElement('button');
-                    const isActive = filterSub === opt.key;
-                    btn.className = `flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm whitespace-nowrap ${isActive ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`;
-                    btn.innerText = opt.name;
-                    btn.onclick = () => { filterSub = opt.key; renderSubMenu(); renderData(); };
-                    list.appendChild(btn);
-                });
-            }
-        }
-
-        /**
-         * 5. 核心渲染 (嚴格分流)
-         * 這裡的邏輯：
-         * - 遇到「地點模式」時，只讀 Category, Name, District。把這些組成一張卡片。
-         * - 遇到「驚喜模式」時，只讀 Type, Brand, Detail。把這些組成另一張完全不同的卡片。
-         */
-        function renderData() {
+        function renderData(rows) {
             const list = document.getElementById('dataList');
-            list.innerHTML = '';
-            
-            // 用來存放「整理好」的顯示項目
-            let displayItems = [];
+            let count = 0;
 
-            allData.forEach(item => {
-                // --- A. 處理地點卡片 ---
-                // 條件：必須是在「地點」或「全部」模式，且必須有出遊類型 (Category)
-                if ((filterMain === '地點' || filterMain === '全部') && item.category) {
-                    
-                    // 檢查關鍵字過濾
-                    let match = true;
-                    if (filterMain === '地點' && filterSub !== '全部') {
-                        const opt = subOptions['地點'].find(o => o.key === filterSub);
-                        match = opt.tags.some(t => item.category.includes(t));
-                    }
+            rows.forEach(cols => {
+                // 簡單寬鬆模式：只要有字就顯示出來
+                if (!cols[0]) return; 
 
-                    if (match) {
-                        displayItems.push({
-                            mode: 'location',         // 標記為地點
-                            tag: item.category,       // 左上角標籤
-                            title: item.name,         // 主標題 (地點名稱)
-                            subtitle: item.district,  // 副標題 (區域)
-                            icon: '📍'
-                        });
-                    }
-                }
+                const item = {
+                    district: cols[0],
+                    name: cols[1],
+                    category: cols[2],
+                    type: cols[3],
+                    brand: cols[4],
+                    detail: cols[5]
+                };
 
-                // --- B. 處理驚喜卡片 ---
-                // 條件：必須是在「驚喜」或「全部」模式，且必須有驚喜類型 (Type)
-                if ((filterMain === '驚喜' || filterMain === '全部') && item.type) {
-                    
-                    // 檢查關鍵字過濾
-                    let match = true;
-                    if (filterMain === '驚喜' && filterSub !== '全部') {
-                        const opt = subOptions['驚喜'].find(o => o.key === filterSub);
-                        match = opt.tags.some(t => item.type.includes(t));
-                    }
-
-                    if (match) {
-                        // 判斷飲料還是點心圖示
-                        const icon = (item.type.includes('飲') || item.type.includes('茶')) ? '🥤' : '🎁';
-                        
-                        displayItems.push({
-                            mode: 'surprise',       // 標記為驚喜
-                            tag: item.type,         // 左上角標籤
-                            title: item.brand,      // 主標題 (品牌名稱！不是地點！)
-                            subtitle: item.detail,  // 副標題 (驚喜品項)
-                            icon: icon
-                        });
-                    }
-                }
-            });
-
-            // 更新計數與標題
-            document.getElementById('listLabel').innerText = filterSub === '全部' ? `${filterMain}清單` : `${filterSub}風格`;
-            document.getElementById('counter').innerText = `${displayItems.length} ITEMS`;
-
-            if (displayItems.length === 0) {
-                list.innerHTML = '<div class="py-20 text-center text-slate-300 text-sm">尚無符合資料<br><span class="text-[10px] opacity-60">請稍候或檢查 Google Sheet 是否發佈</span></div>';
-                return;
-            }
-
-            // 產生 HTML
-            displayItems.forEach(cardData => {
-                const el = document.createElement('div');
-                el.className = "bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm space-y-3 animate-fade transition-transform active:scale-[0.98]";
-                
-                // 根據卡片類型給予不同的顏色風格 (地點藍色系，驚喜灰色系)
-                const tagColorClass = cardData.mode === 'location' 
-                    ? 'bg-blue-50 text-blue-600 border border-blue-100' 
-                    : 'bg-slate-100 text-slate-500 border border-slate-200';
-
-                el.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <div class="space-y-1">
-                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${tagColorClass}">
-                                ${cardData.tag} 
-                            </span>
-                            <h3 class="text-lg font-black text-slate-800 tracking-tight leading-tight">
-                                ${cardData.title}
-                            </h3>
-                        </div>
-                        <div class="text-2xl filter grayscale-[0.2] opacity-90">${cardData.icon}</div>
-                    </div>
-                    
-                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100/50 flex items-center">
-                        <p class="text-xs font-bold text-slate-600 flex-1 truncate">
-                            ${cardData.subtitle}
-                        </p>
-                    </div>
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-lg shadow border border-slate-200";
+                card.innerHTML = `
+                    <h3 class="font-bold text-lg">${item.name || '無名稱'}</h3>
+                    <p class="text-sm text-gray-600">
+                        區域: ${item.district} | 
+                        出遊: <span class="text-blue-600 font-bold">${item.category || '-'}</span> | 
+                        驚喜: <span class="text-pink-600 font-bold">${item.type || '-'}</span>
+                    </p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        原始資料: ${JSON.stringify(cols)}
+                    </p>
                 `;
-                list.appendChild(el);
+                list.appendChild(card);
+                count++;
             });
-        }
 
-        function showToast(msg) {
-            const el = document.getElementById('toast');
-            el.innerText = msg;
-            el.classList.replace('opacity-0', 'opacity-100');
-            setTimeout(() => el.classList.replace('opacity-100', 'opacity-0'), 2500);
+            if (count === 0) {
+                log("⚠️ 資料解析後沒有產生任何卡片，可能是欄位內容都是空的？");
+            } else {
+                log(`✅ 成功渲染 ${count} 張卡片`);
+            }
         }
 
         window.onload = fetchData;
