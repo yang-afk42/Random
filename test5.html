@@ -111,7 +111,7 @@
          * 3. 抓取資料
          */
         function fetchData() {
-            Papa.parse(config.csvUrl, {
+            Papa.parse(config.csvUrl + "&t=" + Date.now(), {
                 download: true,
                 header: false,
                 complete: function(results) {
@@ -281,3 +281,4 @@
 </body>
 
 </html>
+
